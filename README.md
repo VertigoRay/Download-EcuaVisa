@@ -1,15 +1,5 @@
 This uses [you-get](https://you-get.org/).
 
-I originally wrote this in PowerShell, but opted to re-write it in Python and put it on my [Synology](https://www.synology.com/en-global/products/DS1511+) to auto-download the latest episodes and put them where [Plex](http://plex.tv) will find them, keeping only the latest episodes since it's just the news.
+I [originally wrote this in PowerShell](https://github.com/VertigoRay/Download-EcuaVisa/blob/7123b6c918a6e44d28c6709f3a79d23d73c68d2c/Download-EcuaVisa.ps1), but opted to re-write it in Python and put it on my [Plex](http://plex.tv) server to auto-download the latest episodes and put them where [Plex](http://plex.tv) will find them, keeping only the latest episodes since it's just the news.
 
-Cheers!! :beers: 
-
-# Download-EcuaVisa.ps1
-
-PowerShell (POSH) to download the latest News Episodes from EcuaVisa archives.
-
-I switched to Python, as stated above. There maybe some funcionality that's not optimized in PowerShell.
-
-## ToDo
-
-- Create a [REQUIREMENT.json](/Vertigion/REQUIREMENTS.json) for `you-get`.
+Cheers!! :beers:
