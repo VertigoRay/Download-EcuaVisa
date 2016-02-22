@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
-plex = '/volume1/homes/plex'
+plex = '/mnt/plex'
 plex_tv_ecuavisa = '%s/Media/TV/EcuaVisa' % plex
+plex_media_scanner = '%s/Media/TV/EcuaVisa' % plex
 
 noticieros_anteriores = 'http://www.ecuavisa.com/noticieros-anteriores'
 noticieros_episode = 'http://www.ecuavisa.com/ajax-noticiero/nojs/%s/ampliado'
@@ -9,13 +10,12 @@ number_of_episodes_to_keep = 12
 
 ################################################
 
-import os, re, sys, time, traceback, urllib.request
+import datetime, io, os, re, subprocess, sys, time, traceback, urllib.request
+import you_get, you_get.common, you_get.extractors
 
+from contextlib import redirect_stdout
 from stat import S_ISREG, ST_CTIME, ST_MODE
 from subprocess import call
-from you_get.common import *
-from you_get.extractors import *
-from you_get.common import *
 
 def logger(msg, log='sys', level='info', event_id='0x11800000'):
     if log != ('sys' or 'man' or 'conn'):
@@ -24,7 +24,29 @@ def logger(msg, log='sys', level='info', event_id='0x11800000'):
     if level != ('info' or 'warn' or 'err'):
         level = 'info'
 
-    call(["synologset1", log, level, event_id, ('[EcuaVisa] %s' % msg)])
+    print('[EcuaVisa]%s: %s' % (level, msg))
+    # call(["synologset1", log, level, event_id, ('[EcuaVisa] %s' % msg)])
+
+def month_str_to_int(month):
+    if type(month) is int:
+        return month
+
+    months = [
+        'enero',
+        'febrero',
+        'marzo',
+        'abril',
+        'mayo',
+        'junio',
+        'julio',
+        'agosto',
+        'septiembre',
+        'octubre',
+        'noviembre',
+        'diciembre',
+    ]
+
+    return months.index(month) + 1
 
 logger('Checking for New Episodes ...')
 req = urllib.request.Request(noticieros_anteriores)
@@ -40,6 +62,7 @@ episode_numbers = sorted(list(map(int, set(re.findall(r'ajax\-noticiero\/nojs\/(
 logger('Found %s Episodes.' % len(episode_numbers))
 
 os.chdir(plex_tv_ecuavisa)
+downloaded_something = False
 
 for i in list(range(number_of_episodes_to_keep)):
     req = urllib.request.Request(noticieros_episode % episode_numbers[i])
@@ -47,17 +70,42 @@ for i in list(range(number_of_episodes_to_keep)):
         resp = urllib.request.urlopen(req)
     except urllib.error.HTTPError as e:
         logger('HTTPError: %s' % e)
+        continue
 
     respData = resp.read()
 
     url = (re.findall(r'<iframe(?:[^>]*)src="([^"]+)"',str(respData)))[0]
     logger('Downloading: %s' % url)
-    try:
-        download = dailymotion.dailymotion_download(url)
-    except:
-        logger(traceback.format_exc(), level='err')
-        
-    logger('Downloaded: %s' % download)
+
+    # url = 'http://www.dailymotion.com/embed/video/x3qf80s?syndication=173592?inf  o=0&logo=0&related=0&'
+    dm_info = {}
+    with io.StringIO() as buf, redirect_stdout(buf):
+        you_get.extractors.dailymotion.dailymotion_download(url, info_only=True)
+        output = buf.getvalue().split('\n')
+
+    for line in output:
+        try:
+            m = re.findall(r'(\w+):\s+(.+)', line)[0]
+        except IndexError:
+            pass
+        dm_info[m[0]] = m[1]
+
+    print(dm_info['Title'])
+
+    ext = re.findall(r'\(video\/(\w+)\)', dm_info['Type'])[0]
+    m = re.findall(r'(\w+)', dm_info['Title'])
+    d = datetime.datetime(int(m[-1]), int(month_str_to_int(m[-2])), int(m[-3]))
+    you_get.common.output_filename = 'EcuaVisa - '+ "{:%Y-%m-%d}".format(d) +' - '+ ' '.join(m[:-3]) +'.'+ ext
+
+    if os.path.isfile(you_get.common.output_filename):
+        logger('Skipping Downloaded: %s' % you_get.common.output_filename)
+    else:
+        try:
+            download = you_get.extractors.dailymotion.dailymotion_download(url)
+            downloaded_something = True
+            logger('Downloaded: %s' % download)
+        except:
+            logger(traceback.format_exc(), level='err')
 
 dirpath = r'.'
 
@@ -91,3 +139,7 @@ for i in list(range(number_of_episodes_to_keep, 999)):
     except OSError:
         logger('Episode found a second ago, no longer exists. Moving on ...', level='warn')
         pass
+
+if downloaded_something:
+    os.environ['LD_LIBRARY_PATH'] = '/usr/lib/plexmediaserver'
+    subprocess.check_call(['/usr/lib/plexmediaserver/Plex Media Scanner', '--scan', '--refresh', '--section', '1'])
